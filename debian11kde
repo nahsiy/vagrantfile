@@ -1,3 +1,7 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+
 # Définition de la box (image du système d'exploitation) à utiliser
 Vagrant.configure("2") do |config|
     config.vm.box = "debian/bullseye64"
