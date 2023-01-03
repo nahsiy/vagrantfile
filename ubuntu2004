@@ -1,0 +1,46 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+# Définition de la box (image du système d'exploitation) à utiliser
+Vagrant.configure("2") do |config|
+    config.vm.box = "ubuntu/focal64"
+
+    # Donner un nom à la machine virtuelle
+      config.vm.hostname = "Ubuntu20.04"
+    
+    # Configuration de la machine virtuelle
+      config.vm.provider "virtualbox" do |vb|
+
+    # Configuration de la mémoire et du processeur
+      vb.memory = 4096
+      vb.cpus = 2
+      
+    # Configuration de la carte réseau
+      vb.customize ["modifyvm", :id, "--natdnshostresolver1", "on"]
+      vb.customize ["modifyvm", :id, "--natdnsproxy1", "on"]
+
+    # Configurer une adresse IP privée pour la machine virtuelle
+      config.vm.network "private_network", ip: "192.168.56.101"
+
+    # Ajout de mémoire vidéo
+      vb.customize ["modifyvm", :id, "--vram", "256"]
+
+    # Ajout de la prise en charge du son
+      vb.customize ["modifyvm", :id, "--audio", "pulse"]
+      end
+    
+    # Configuration de la connexion par clé ssh
+      config.ssh.insert_key = false
+
+    # Configuration du système d'exploitation
+      config.vm.provision "shell", inline: <<-SHELL
+    
+    # Mise à jour de la liste des paquets
+      apt-get update
+    
+      # Installation Ansible - python
+      apt-get install -y python3 python3-pip
+      pip3 install ansible
+  
+    SHELL
+end
