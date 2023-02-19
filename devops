@@ -1,0 +1,111 @@
+# -*- mode: ruby -*-
+# vi: set ft=ruby :
+
+Vagrant.configure("2") do |config|
+  # Configuration de la machine virtuelle
+  config.vm.box = "debian/bullseye64"
+  config.vm.hostname = "devops"
+  config.vm.network "private_network", ip: "192.168.56.10" # A ajuster selon votre lan
+  config.vm.provider "virtualbox" do |vb|
+    vb.memory = "4096"
+    vb.cpus = "2"
+    vb.customize ["modifyvm", :id, "--vram", "128"] # Allouer 128 Mo de mémoire vidéo
+    vb.customize ["modifyvm", :id, "--accelerate3d", "on"] # Activer l'accélération 3D
+  end
+
+  #### Le français, langue diplomatique
+  config.vm.provision "fr", type: "shell", inline: <<-SHELL
+    # Mise à jour des paquets
+    sudo apt-get update
+
+    # Installation du paquet pour le clavier en français
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y console-common
+    sudo sed -i 's/CHARMAP="UTF-8"/CHARMAP="UTF-8"\nCODESET="Lat15"/' /etc/default/console-setup
+    sudo dpkg-reconfigure console-setup
+
+    # Configuration du clavier en français
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y keyboard-configuration
+    sudo sed -i 's/XKBLAYOUT="us"/XKBLAYOUT="fr"/' /etc/default/keyboard
+    sudo dpkg-reconfigure keyboard-configuration
+
+    # Installation des paquets de la langue française
+    sudo apt-get install -y locales
+    sudo sed -i 's/# fr_FR.UTF-8 UTF-8/fr_FR.UTF-8 UTF-8/' /etc/locale.gen
+    sudo locale-gen
+    sudo update-locale LANG=fr_FR.UTF-8
+  SHELL
+
+  # Installation de Java
+  config.vm.provision "java", type: "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y gnupg2 software-properties-common
+    sudo apt-get install -y openjdk-11-jdk
+  SHELL
+
+  # Installation des paquets requis
+  config.vm.provision "paquets", type: "shell", inline: <<-SHELL
+    sudo apt-get update
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y docker.io maven git gnome-session
+  SHELL
+
+  # Ajout des clés publiques pour les différents packages
+  config.vm.provision "keys", type: "shell", inline: <<-SHELL
+    wget -q -O - https://pkg.jenkins.io/debian-stable/jenkins.io.key | sudo apt-key add -
+    wget -q -O - https://download.docker.com/linux/debian/gpg | sudo apt-key add -
+    wget -q -O - https://packages.gitlab.com/gpg.key | sudo apt-key add -
+    sudo sh -c 'echo deb https://pkg.jenkins.io/debian-stable binary/ > /etc/apt/sources.list.d/jenkins.list'
+    sudo add-apt-repository "deb [arch=amd64] https://download.docker.com/linux/debian $(lsb_release -cs) stable"
+    sudo sh -c 'echo deb https://packages.gitlab.com/gitlab/gitlab-ce/debian/ bullseye main > /etc/apt/sources.list.d/gitlab-ce.list'
+    sudo apt-get update
+  SHELL
+
+  # Permissions Docker
+  config.vm.provision "docker", type: "shell", inline: <<-SHELL
+    sudo usermod -aG docker vagrant
+    sudo systemctl start docker 
+    sudo systemctl enable docker
+  SHELL
+
+  # Installation de Jenkins
+  config.vm.provision "jenkins", type: "shell", inline: <<-SHELL
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y jenkins
+    sudo systemctl start jenkins
+    sudo systemctl enable jenkins
+  SHELL
+
+  # Création de l'utilisateur et du groupe GitLab
+  config.vm.provision "user_gitlab", type: "shell", inline: <<-SHELL
+    sudo groupadd gitlab
+    sudo useradd -m -g gitlab -s /bin/bash gitlab
+  SHELL
+
+  # Création du répertoire /mnt/data (mes habitudes au lieu de /srv) et modification des permissions pour GitLab
+  config.vm.provision "permissions_gitlab", type: "shell", inline: <<-SHELL
+    sudo mkdir /mnt/data
+    sudo chown -R gitlab:gitlab /mnt/data
+    sudo chmod 777 /mnt/data
+  SHELL
+
+ # Installation de GitLab
+  config.vm.provision "gitlab", type: "shell", inline: <<-SHELL
+    sudo docker run --detach --hostname gitlab.example.com --publish 443:443 --publish 80:80 --name gitlab --restart always --volume /mnt/data/gitlab/config:/etc/gitlab --volume /mnt/data/gitlab/logs:/var/log/gitlab --volume /mnt/data/gitlab/data:/var/opt/gitlab gitlab/gitlab-ce:latest
+  SHELL
+
+  # Configuration de Jenkins pour GitLab
+  config.vm.provision "jenkins_conf", type: "shell", inline: <<-SHELL
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y git
+    sudo wget -O /var/lib/jenkins/plugins/gitlab-plugin.hpi http://updates.jenkins-ci.org/latest/gitlab-plugin.hpi
+    sudo sed -i '/<disabled>true<\\/disabled>/d' /var/lib/jenkins/config.xml
+    sudo service jenkins restart
+  SHELL
+
+  # Installation de Maven
+  config.vm.provision "maven", type: "shell", inline: <<-SHELL
+    sudo apt-get install -y maven
+  SHELL
+
+  # Installation de l'environnement de bureau XFCE ( leger pour machine virtuelle)
+  config.vm.provision "xfce", type: "shell", inline: <<-SHELL
+    sudo DEBIAN_FRONTEND=noninteractive apt-get install -y xfce4 xfce4-goodies
+  SHELL
+end
